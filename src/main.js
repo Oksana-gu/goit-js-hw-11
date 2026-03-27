@@ -1,62 +1,113 @@
-import iziToast from 'izitoast';
-import 'izitoast/dist/css/iziToast.min.css';
+import iziToast from "izitoast";
+import "izitoast/dist/css/iziToast.min.css";
 
-import { getImagesByQuery } from './js/pixabay-api.js';
+import { getImagesByQuery } from "./js/pixabay-api.js";
+
 import {
-  createGallery,
-  clearGallery,
-  showLoader,
-  hideLoader,
-} from './js/render-functions.js';
+    createGallery,
+    clearGallery,
+    showLoader,
+    hideLoader,
+    showLoadMoreButton,
+    hideLoadMoreButton,
+} from "./js/render-functions.js";
 
-const searchForm = document.querySelector('.form');
+const form = document.querySelector('.form');
+const loadMoreBtn = document.querySelector('.load-more');
 
-searchForm.addEventListener('submit', handleSubmit);
+let query = '';
+let page = 1;
+let totalHits = 0;
 
-function handleSubmit(event) {
-  event.preventDefault();
-  const query = event.currentTarget.elements['search-text'].value
-    .toLowerCase()
-    .trim();
+form.addEventListener('submit', async e => {
+    e.preventDefault();
 
-  if (query === '') {
-    iziToast.error({
-      title: 'Error',
-      message: 'Enter a search term',
-      position: 'topRight',
-    });
-    return;
-  }
+    query = e.target.elements["search-text"].value.trim();
 
-  clearGallery();
-
-  showLoader();
-
-  getImagesByQuery(query)
-    .then(images => {
-      hideLoader();
-      if (images.length === 0) {
+    if (!query) {
         iziToast.error({
-          title: 'Error',
-          message:
-            'Sorry, there are no images matching your search query. Please try again!',
-          position: 'topRight',
+            message: "Please enter a search query!",
         });
-      } else {
-        createGallery(images);
-      }
-    })
-    .catch(error => {
-      hideLoader();
-      iziToast.error({
-        title: 'Error',
-        message:
-          'Failed to fetch images. Please check your network connection.',
-        position: 'topRight',
-      });
-      console.error('Error:', error.message);
-    })
-    .finally(() => {
-      searchForm.reset();
-    });
-}
+        return;
+    }
+
+    page = 1;
+    clearGallery();
+    showLoader();
+
+    try {
+        hideLoadMoreButton();
+        const data = await getImagesByQuery(query, page);
+        totalHits = data.totalHits;
+
+        if (data.hits.length === 0) {
+            iziToast.error({
+                message: "Sorry, there are no images matching your search query. Please try again!",
+            })
+            return;
+        }
+
+        createGallery(data.hits);
+
+        // 
+        const totalPages = Math.ceil(totalHits / 15);
+
+        if (page < totalPages) {
+            showLoadMoreButton();
+        } else {
+            hideLoadMoreButton();
+            iziToast.info({
+                message: "We're sorry, but you've reached the end of search results.",
+            });
+        }  
+        
+    } catch (error) {
+        iziToast.error({
+            message: "Something went wrong. Try again!",
+        });
+
+    } finally {
+        hideLoader();
+    }
+});
+
+loadMoreBtn.addEventListener('click', async () => {
+    page += 1;
+
+    try {
+        showLoader();
+        hideLoadMoreButton();
+
+        const data = await getImagesByQuery(query, page);
+
+        createGallery(data.hits);
+
+        const totalPages = Math.ceil(totalHits / 15);
+
+        if (page >= totalPages) {
+            hideLoadMoreButton();
+
+            iziToast.info({
+                message: "We're sorry, but you've reached the end of search results.",
+            });
+        } else {
+            showLoadMoreButton(); 
+        }
+
+        // скрол
+        const card = document.querySelector('.gallery a');
+        const rect = card.getBoundingClientRect();
+
+        window.scrollBy({
+            top: rect.height * 2,
+            behavior: 'smooth',
+        });
+
+    } catch (error) {
+        iziToast.error({
+            message: 'Error loading more images',
+        });
+    } finally {
+        hideLoader();
+    }
+});
